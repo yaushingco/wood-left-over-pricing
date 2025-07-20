@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>零散木板定價計算器</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f4f8;
+            color: #334155;
+        }
+        .container {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 1.5rem;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        h1, h2 {
+            color: #1e293b;
+            font-weight: 700;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #475569;
+        }
+        input[type="number"], input[type="text"], select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.2s ease-in-out;
+        }
+        input[type="number"]:focus, input[type="text"]:focus, select:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out, transform 0.1s ease-in-out;
+        }
+        .btn-primary {
+            background-color: #3b82f6;
+            color: #ffffff;
+        }
+        .btn-primary:hover {
+            background-color: #2563eb;
+            transform: translateY(-1px);
+        }
+        .btn-secondary {
+            background-color: #e2e8f0;
+            color: #475569;
+        }
+        .btn-secondary:hover {
+            background-color: #cbd5e1;
+            transform: translateY(-1px);
+        }
+        .result-box {
+            background-color: #e0f2fe;
+            border: 2px solid #90cdf4;
+            padding: 1.5rem;
+            border-radius: 12px;
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #0c4a6e;
+        }
+        .info-text {
+            font-size: 0.9rem;
+            color: #64748b;
+            margin-top: 0.25rem;
+        }
+        .error-message {
+            background-color: #fee2e2;
+            color: #ef4444;
+            padding: 0.75rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            border: 1px solid #f87171;
+            display: none; /* Hidden by default */
+        }
+        .error-message.active {
+            display: block;
+        }
+        .calculated-value {
+            font-weight: bold;
+            color: #1e293b;
+            padding: 0.5rem;
+            background-color: #f8fafc;
+            border-radius: 6px;
+            border: 1px dashed #cbd5e1;
+            display: block;
+            text-align: center;
+        }
+        .llm-output-box {
+            background-color: #f0fdf4;
+            border: 2px solid #a7f3d0;
+            padding: 1.5rem;
+            border-radius: 12px;
+            margin-top: 1.5rem;
+            font-size: 1rem;
+            color: #065f46;
+            line-height: 1.6;
+            white-space: pre-wrap; /* Preserve whitespace and line breaks */
+        }
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+            display: none; /* Hidden by default */
+        }
+        .loading-spinner.active {
+            display: block;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="p-4">
+    <div class="container">
+        <h1 class="text-3xl mb-6 text-center">零散木板定價計算器</h1>
+
+        <div id="errorMessage" class="error-message">
+            <p><strong>輸入錯誤：</strong></p>
+            <ul id="errorList" class="list-disc list-inside"></ul>
+        </div>
+
+        <div class="mb-8 p-6 bg-blue-50 rounded-lg border border-blue-200">
+            <h2 class="text-xl mb-4 text-blue-800">A. 基本設定 (店鋪內部參數)</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <label for="originalBoardPrice" class="block text-sm">原件木板標準售價 (4尺 x 8尺)</label>
+                    <input type="number" id="originalBoardPrice" value="320" min="0" step="0.01" class="mt-1">
+                    <p class="info-text">輸入一塊 4尺 x 8尺 木板的標準售價。</p>
+                </div>
+                <div>
+                    <label for="fragmentMarkupFactor" class="block text-sm">零散銷售溢價係數 ($K_{fragment}$)</label>
+                    <input type="number" id="fragmentMarkupFactor" value="1.3" min="1" step="0.1" class="mt-1">
+                    <p class="info-text">零散銷售每平方尺價格是原件的倍數 (例如 2.0 代表翻倍)。</p>
+                </div>
+                <div>
+                    <label for="wasteThresholdArea" class="block text-sm">廢料判斷門檻面積 (平方尺)</label>
+                    <input type="number" id="wasteThresholdArea" value="2.0" min="0" step="0.1" class="mt-1" readonly>
+                    <p class="info-text">小於此面積的碎料視為廢料 (預設 1尺 x 2尺 = 2平方尺)。</p>
+                </div>
+                <div>
+                    <label for="pricePerCut" class="block text-sm">單刀切割服務費 ($F_{cut\_per\_knife}$)</label>
+                    <input type="number" id="pricePerCut" value="3.0" min="0" step="0.01" class="mt-1" readonly>
+                    <p class="info-text">每切割一刀的費用 (預設 $3)。</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="mb-8 p-6 bg-gray-50 rounded-lg border border-gray-200">
+            <h2 class="text-xl mb-4 text-gray-800">B. 訂單詳情與計算 (同事填寫)</h2>
+
+            <div class="mb-4">
+                <label for="globalUnit" class="block text-sm font-semibold mb-2">選擇輸入單位:</label>
+                <select id="globalUnit" class="w-full p-2 border rounded-md">
+                    <option value="inch" selected>寸 (Inches)</option>
+                    <option value="feet">尺 (Feet)</option>
+                    <option value="mm">毫米 (Millimeters)</option>
+                </select>
+                <p class="info-text mt-1">選擇後，下方所有長度和寬度輸入將以此單位為準。</p>
+                <p class="info-text mt-1 text-red-600">**注意：** 寸的輸入請直接使用小數，例如 16-5/8 寸請輸入 16.625。</p>
+            </div>
+
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold mb-3 text-gray-700">1. 客人所需木板 (可多行填寫)</h3>
+                <div id="customerItems" class="space-y-4">
+                    <!-- Initial customer item row -->
+                    <div class="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end customer-item-row">
+                        <div>
+                            <label class="block text-sm">寬 (<span class="unit-display">寸</span>)</label>
+                            <input type="number" class="item-width" value="24" min="0.01" step="0.01">
+                        </div>
+                        <div>
+                            <label class="block text-sm">長 (<span class="unit-display">寸</span>)</label>
+                            <input type="number" class="item-length" value="30" min="0.01" step="0.01">
+                        </div>
+                        <div>
+                            <label class="block text-sm">數量</label>
+                            <input type="number" class="item-quantity" value="1" min="1" step="1">
+                        </div>
+                        <div class="col-span-2">
+                            <p class="text-sm text-gray-600">單塊面積: <span class="item-area">0</span> 平方尺</p>
+                            <p class="text-sm text-gray-600">總面積: <span class="item-total-area">0</span> 平方尺</p>
+                            <button class="btn btn-secondary btn-sm mt-2 remove-item-btn">移除</button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-5 gap-4 items-end customer-item-row">
+                        <div>
+                            <label class="block text-sm">寬 (<span class="unit-display">寸</span>)</label>
+                            <input type="number" class="item-width" value="10" min="0.01" step="0.01">
+                        </div>
+                        <div>
+                            <label class="block text-sm">長 (<span class="unit-display">寸</span>)</label>
+                            <input type="number" class="item-length" value="10" min="0.01" step="0.01">
+                        </div>
+                        <div>
+                            <label class="block text-sm">數量</label>
+                            <input type="number" class="item-quantity" value="1" min="1" step="1">
+                        </div>
+                        <div class="col-span-2">
+                            <p class="text-sm text-gray-600">單塊面積: <span class="item-area">0</span> 平方尺</p>
+                            <p class="text-sm text-gray-600">總面積: <span class="item-total-area">0</span> 平方尺</p>
+                            <button class="btn btn-secondary btn-sm mt-2 remove-item-btn">移除</button>
+                        </div>
+                    </div>
+                </div>
+                <button id="addCustomerItem" class="btn btn-secondary mt-4">新增客人所需木板</button>
+            </div>
+
+            <div class="mb-6 p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                <h3 class="text-lg font-semibold mb-3 text-yellow-800">2. 剩餘板材信息 (請輸入所有可用碎料)</h3>
+                <p class="info-text mb-2">請輸入您所有可用於切割的零散板材的尺寸和數量。系統會嘗試從中匹配。</p>
+                <div id="stockItems" class="space-y-4">
+                    <!-- Initial stock item row -->
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end stock-item-row">
+                        <div>
+                            <label class="block text-sm">存貨寬度 (<span class="unit-display">寸</span>)</label>
+                            <input type="number" class="stock-width" value="48" min="0.01" step="0.01">
+                        </div>
+                        <div>
+                            <label class="block text-sm">存貨長度 (<span class="unit-display">寸</span>)</label>
+                            <input type="number" class="stock-length" value="48" min="0.01" step="0.01">
+                        </div>
+                        <div>
+                            <label class="block text-sm">存貨數量</label>
+                            <input type="number" class="stock-quantity" value="1" min="1" step="1">
+                        </div>
+                        <div>
+                            <button class="btn btn-secondary btn-sm mt-2 remove-stock-btn">移除</button>
+                        </div>
+                    </div>
+                </div>
+                <button id="addStockItem" class="btn btn-secondary mt-4">新增存貨板材</button>
+            </div>
+
+            <div class="mb-6 p-4 bg-red-50 rounded-lg border border-red-200">
+                <h3 class="text-lg font-semibold mb-3 text-red-800">3. 切割方案與廢料判斷 (自動計算)</h3>
+                <p class="info-text mb-3">系統會根據客人需求和可用存貨，自動估算刀數和需計入的廢料面積。</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm">估計所需刀數</label>
+                        <span id="calculatedCuts" class="calculated-value">0</span>
+                        <p class="info-text">為切割出所有客人所需木板，總共需要切割的刀數。</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm">需計入的廢料面積 (平方尺)</label>
+                        <span id="calculatedWasteArea" class="calculated-value">0.00</span>
+                        <p class="info-text">所有切割後，面積小於 2 平方尺的碎料總面積。</p>
+                    </div>
+                </div>
+                <p id="unfulfilledDemandMessage" class="info-text mt-4 text-red-600 font-bold hidden">
+                    **警告：** 某些客人所需木板因存貨不足而無法滿足。請檢查存貨數量和尺寸。
+                </p>
+            </div>
+
+            <button id="calculatePriceBtn" class="btn btn-primary w-full mt-6">計算最終報價</button>
+        </div>
+
+        <div class="p-6 bg-green-50 rounded-lg border border-green-200">
+            <h2 class="text-xl mb-4 text-green-800">C. 最終報價</h2>
+            <div class="result-box">
+                <p class="text-base font-normal mb-2">建議報價:</p>
+                <p class="text-4xl font-bold" id="finalPrice">$0.00</p>
+            </div>
+            
+            <button id="explainQuoteBtn" class="btn btn-secondary w-full mt-4">✨ 解釋報價</button>
+            <div id="llmLoadingSpinner" class="loading-spinner mt-4"></div>
+            <div id="llmExplanationOutput" class="llm-output-box hidden">
+                <!-- LLM generated explanation will be displayed here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Element References
+        const originalBoardPriceInput = document.getElementById('originalBoardPrice');
+        const fragmentMarkupFactorInput = document.getElementById('fragmentMarkupFactor');
+        const wasteThresholdAreaInput = document.getElementById('wasteThresholdArea');
+        const pricePerCutInput = document.getElementById('pricePerCut');
+        const globalUnitSelect = document.getElementById('globalUnit');
+
+        const customerItemsContainer = document.getElementById('customerItems');
+        const addCustomerItemBtn = document.getElementById('addCustomerItem');
+
+        const stockItemsContainer = document.getElementById('stockItems');
+        const addStockItemBtn = document.getElementById('addStockItem');
+
+        const calculatedCutsDisplay = document.getElementById('calculatedCuts');
+        const calculatedWasteAreaDisplay = document.getElementById('calculatedWasteArea');
+        const unfulfilledDemandMessage = document.getElementById('unfulfilledDemandMessage');
+
+        const calculatePriceBtn = document.getElementById('calculatePriceBtn');
+        const finalPriceDisplay = document.getElementById('finalPrice');
+
+        const errorMessageDiv = document.getElementById('errorMessage');
+        const errorList = document.getElementById('errorList');
+
+        const explainQuoteBtn = document.getElementById('explainQuoteBtn'); // New LLM button
+        const llmLoadingSpinner = document.getElementById('llmLoadingSpinner'); // New loading spinner
+        const llmExplanationOutput = document.getElementById('llmExplanationOutput'); // New LLM output div
+
+        // Constants
+        const ORIGINAL_BOARD_TOTAL_AREA = 32; // 4尺 x 8尺 = 32 平方尺
+        const MAX_BOARD_LENGTH_FEET = 8;      // 8 尺 = 96 寸 = 2438.4 毫米
+        const MAX_BOARD_WIDTH_FEET = 4;       // 4 尺 = 48 寸 = 1219.2 毫米
+        const EPSILON = 0.001; // Small value for float comparison tolerance
+
+        // Global variables to store calculated values for LLM explanation
+        let currentTotalCustomerArea = 0;
+        let currentTotalChargeableWasteArea = 0;
+        let currentTotalCuts = 0;
+        let currentPricePerCut = 0;
+        let currentFinalCalculatedPrice = 0;
+
+
+        // Unit Conversion Function: Converts value from selected unit to feet
+        function convertToFeet(value, unit) {
+            if (unit === 'feet') {
+                return value;
+            } else if (unit === 'inch') {
+                return value / 12; // 1 foot = 12 inches
+            } else if (unit === 'mm') {
+                return value / 304.8; // 1 foot = 304.8 mm
+            }
+            return 0;
+        }
+
+        // Function: Updates unit labels for all length/width input fields
+        function updateUnitLabels(unit) {
+            const unitDisplays = document.querySelectorAll('.unit-display');
+            let unitText = '';
+            if (unit === 'feet') unitText = '尺';
+            else if (unit === 'inch') unitText = '寸';
+            else if (unit === 'mm') unitText = '毫米';
+
+            unitDisplays.forEach(span => {
+                span.textContent = unitText;
+            });
+        }
+
+        // Function: Validates if dimensions exceed the maximum board size
+        function validateDimensions(length, width, unit, inputName) {
+            const lengthInFeet = convertToFeet(length, unit);
+            const widthInFeet = convertToFeet(width, unit);
+            let errors = [];
+
+            // IMPORTANT: Width is the first input, Length is the second
+            // MAX_BOARD_WIDTH_FEET corresponds to the first input (new 'width')
+            // MAX_BOARD_LENGTH_FEET corresponds to the second input (new 'length')
+
+            if (widthInFeet > MAX_BOARD_WIDTH_FEET + EPSILON) { // Check against MAX_BOARD_WIDTH_FEET
+                errors.push(`${inputName} 寬度 (${width} ${unit}) 超過原板材最大寬度 (4 尺 / 48 寸 / 1.22 米)。`);
+            }
+            if (lengthInFeet > MAX_BOARD_LENGTH_FEET + EPSILON) { // Check against MAX_BOARD_LENGTH_FEET
+                errors.push(`${inputName} 長度 (${length} ${unit}) 超過原板材最大長度 (8 尺 / 96 寸 / 2.44 米)。`);
+            }
+            return errors;
+        }
+
+        // Function: Displays or hides error messages
+        function displayErrors(errors) {
+            errorList.innerHTML = '';
+            if (errors.length > 0) {
+                errors.forEach(err => {
+                    const li = document.createElement('li');
+                    li.textContent = err;
+                    errorList.appendChild(li);
+                });
+                errorMessageDiv.classList.add('active');
+                return true; // Errors exist
+            } else {
+                errorMessageDiv.classList.remove('active');
+                return false; // No errors
+            }
+        }
+
+        // Function: Updates area display and validates dimensions for a single item row
+        function updateItemAreaAndValidate(row, isStock = false) {
+            const currentUnit = globalUnitSelect.value;
+            // Note: item-width is now the first input, item-length is the second
+            const widthInput = row.querySelector(isStock ? '.stock-width' : '.item-width');
+            const lengthInput = row.querySelector(isStock ? '.stock-length' : '.item-length');
+            const quantityInput = row.querySelector(isStock ? '.stock-quantity' : '.item-quantity');
+
+            const width = parseFloat(widthInput.value) || 0;
+            const length = parseFloat(lengthInput.value) || 0;
+            const quantity = parseInt(quantityInput.value) || 0;
+
+            const widthInFeet = convertToFeet(width, currentUnit);
+            const lengthInFeet = convertToFeet(length, currentUnit);
+
+            const singleArea = lengthInFeet * widthInFeet; // Area calculation remains L*W
+            const totalArea = singleArea * quantity;
+
+            if (!isStock) { // Only customer items display area
+                row.querySelector('.item-area').textContent = singleArea.toFixed(2);
+                row.querySelector('.item-total-area').textContent = totalArea.toFixed(2);
+            }
+
+            // Validate dimensions with swapped roles for width/length inputs
+            const errors = validateDimensions(length, width, currentUnit, isStock ? '存貨板材' : '客人所需木板');
+            return errors;
+        }
+
+        // Function: Adds a new customer item row
+        function addCustomerItemRow() {
+            const newItemRow = document.createElement('div');
+            newItemRow.className = 'grid grid-cols-1 sm:grid-cols-5 gap-4 items-end customer-item-row';
+            newItemRow.innerHTML = `
+                <div>
+                    <label class="block text-sm">寬 (<span class="unit-display"></span>)</label>
+                    <input type="number" class="item-width" value="0" min="0.01" step="0.01">
+                </div>
+                <div>
+                    <label class="block text-sm">長 (<span class="unit-display"></span>)</label>
+                    <input type="number" class="item-length" value="0" min="0.01" step="0.01">
+                </div>
+                <div>
+                    <label class="block text-sm">數量</label>
+                    <input type="number" class="item-quantity" value="1" min="1" step="1">
+                </div>
+                <div class="col-span-2">
+                    <p class="text-sm text-gray-600">單塊面積: <span class="item-area">0</span> 平方尺</p>
+                    <p class="text-sm text-gray-600">總面積: <span class="item-total-area">0</span> 平方尺</p>
+                    <button class="btn btn-secondary btn-sm mt-2 remove-item-btn">移除</button>
+                </div>
+            `;
+            customerItemsContainer.appendChild(newItemRow);
+
+            updateUnitLabels(globalUnitSelect.value); // Update unit display for new row
+
+            newItemRow.querySelectorAll('input').forEach(input => {
+                input.addEventListener('input', calculatePrice); // Trigger calculation on any input change
+            });
+            newItemRow.querySelector('.remove-item-btn').addEventListener('click', () => {
+                newItemRow.remove();
+                calculatePrice();
+            });
+            updateItemAreaAndValidate(newItemRow); // Initialize area display for new row
+        }
+
+        // Function: Adds a new stock item row
+        function addStockItemRow() {
+            const newStockRow = document.createElement('div');
+            newStockRow.className = 'grid grid-cols-1 md:grid-cols-4 gap-4 items-end stock-item-row';
+            newStockRow.innerHTML = `
+                <div>
+                    <label class="block text-sm">存貨寬度 (<span class="unit-display"></span>)</label>
+                    <input type="number" class="stock-width" value="0" min="0.01" step="0.01">
+                </div>
+                <div>
+                    <label class="block text-sm">存貨長度 (<span class="unit-display"></span>)</label>
+                    <input type="number" class="stock-length" value="0" min="0.01" step="0.01">
+                </div>
+                <div>
+                    <label class="block text-sm">存貨數量</label>
+                    <input type="number" class="stock-quantity" value="1" min="1" step="1">
+                </div>
+                <div>
+                    <button class="btn btn-secondary btn-sm mt-2 remove-stock-btn">移除</button>
+                </div>
+            `;
+            stockItemsContainer.appendChild(newStockRow);
+
+            updateUnitLabels(globalUnitSelect.value); // Update unit display for new row
+
+            newStockRow.querySelectorAll('input').forEach(input => {
+                input.addEventListener('input', calculatePrice); // Trigger calculation on any input change
+            });
+            newStockRow.querySelector('.remove-stock-btn').addEventListener('click', () => {
+                newStockRow.remove();
+                calculatePrice();
+            });
+            updateItemAreaAndValidate(newStockRow, true); // Initialize area display for new row (as stock)
+        }
+
+        // Helper function to calculate remainders from a guillotine cut
+        // Returns two potential remainder pieces (L, W, Area)
+        function getGuillotineRemainders(stockL, stockW, cutL, cutW) {
+            let remainders = [];
+
+            // Option 1: Cut along stockL (cut the length first)
+            // Resulting pieces: (cutL, cutW) and two remainders:
+            // R1: (stockL - cutL, stockW)
+            // R2: (cutL, stockW - cutW)
+            const rem1_L_cut = { L: stockL - cutL, W: stockW };
+            const rem2_L_cut = { L: cutL, W: stockW - cutW };
+            const totalRemainderArea_L_cut = (rem1_L_cut.L * rem1_L_cut.W) + (rem2_L_cut.L * rem2_L_cut.W);
+
+            // Option 2: Cut along stockW (cut the width first)
+            // Resulting pieces: (cutL, cutW) and two remainders:
+            // R1: (stockL, stockW - cutW)
+            // R2: (stockL - cutL, cutW)
+            const rem1_W_cut = { L: stockL, W: stockW - cutW };
+            const rem2_W_cut = { L: stockL - cutL, W: cutW };
+            const totalRemainderArea_W_cut = (rem1_W_cut.L * rem1_W_cut.W) + (rem2_W_cut.L * rem2_W_cut.W);
+
+            if (totalRemainderArea_L_cut < totalRemainderArea_W_cut) {
+                // Choose L_cut if it results in less total remainder waste
+                remainders.push(rem1_L_cut, rem2_L_cut);
+            } else {
+                // Otherwise, choose W_cut
+                remainders.push(rem1_W_cut, rem2_W_cut);
+            }
+
+            return remainders.filter(r => r.L > EPSILON && r.W > EPSILON); // Filter out zero or negative dimensions
+        }
+
+        // Custom rounding function based on user's rule
+        function roundToNearestFive(price) {
+            const integerPart = Math.floor(price);
+            const decimalPart = price - integerPart;
+
+            // Handle decimal part first: round to nearest integer
+            let roundedInteger = Math.round(price); // Standard rounding to nearest integer
+
+            // Now apply custom rounding to the last digit of the integer part
+            const lastDigit = roundedInteger % 10;
+            let finalRoundedPrice = roundedInteger;
+
+            if (lastDigit >= 0 && lastDigit <= 2) {
+                finalRoundedPrice = roundedInteger - lastDigit; // Round down to nearest 0
+            } else if (lastDigit >= 3 && lastDigit <= 6) {
+                finalRoundedPrice = roundedInteger - lastDigit + 5; // Round to 5 (e.g., 93->95, 94->95, 95->95, 96->95)
+            } else if (lastDigit >= 7 && lastDigit <= 9) {
+                finalRoundedPrice = roundedInteger - lastDigit + 10; // Round up to nearest 0
+            }
+            return finalRoundedPrice;
+        }
+
+
+        // Main Calculation Function
+        function calculatePrice() {
+            let allErrors = [];
+            unfulfilledDemandMessage.classList.add('hidden'); // Hide warning at start of calculation
+
+            // 1. Validate all input dimensions
+            document.querySelectorAll('.customer-item-row').forEach(row => {
+                const errors = updateItemAreaAndValidate(row);
+                allErrors = allErrors.concat(errors);
+            });
+            document.querySelectorAll('.stock-item-row').forEach(row => {
+                const errors = updateItemAreaAndValidate(row, true);
+                allErrors = allErrors.concat(errors);
+            });
+
+            if (displayErrors(allErrors)) {
+                finalPriceDisplay.textContent = `$0.00`;
+                calculatedCutsDisplay.textContent = '0';
+                calculatedWasteAreaDisplay.textContent = '0.00';
+                return;
+            }
+
+            const originalBoardPrice = parseFloat(originalBoardPriceInput.value) || 0;
+            const fragmentMarkupFactor = parseFloat(fragmentMarkupFactorInput.value) || 0;
+            const pricePerCut = parseFloat(pricePerCutInput.value) || 0;
+            const wasteThresholdArea = parseFloat(wasteThresholdAreaInput.value) || 0;
+
+            const unitPriceOriginal = originalBoardPrice / ORIGINAL_BOARD_TOTAL_AREA;
+
+            // 2. Prepare customer demand list (flattened by quantity)
+            let customerPieces = [];
+            document.querySelectorAll('.customer-item-row').forEach(row => {
+                // Note: width is now the first input, length is the second
+                const width = parseFloat(row.querySelector('.item-width').value) || 0;
+                const length = parseFloat(row.querySelector('.item-length').value) || 0;
+                const quantity = parseInt(row.querySelector('.item-quantity').value) || 0;
+                const lengthInFeet = convertToFeet(length, globalUnitSelect.value);
+                const widthInFeet = convertToFeet(width, globalUnitSelect.value);
+                const area = lengthInFeet * widthInFeet;
+                for (let i = 0; i < quantity; i++) {
+                    customerPieces.push({ length: lengthInFeet, width: widthInFeet, area: area, fulfilled: false });
+                }
+            });
+
+            // 3. Prepare available stock list (flattened by quantity and make them mutable)
+            let mutableStock = []; // Use a mutable copy for simulation
+            document.querySelectorAll('.stock-item-row').forEach(row => {
+                // Note: stock-width is now the first input, stock-length is the second
+                const width = parseFloat(row.querySelector('.stock-width').value) || 0;
+                const length = parseFloat(row.querySelector('.stock-length').value) || 0;
+                const quantity = parseInt(row.querySelector('.stock-quantity').value) || 0;
+                const lengthInFeet = convertToFeet(length, globalUnitSelect.value);
+                const widthInFeet = convertToFeet(width, globalUnitSelect.value);
+                const area = lengthInFeet * widthInFeet;
+                for (let i = 0; i < quantity; i++) {
+                    mutableStock.push({
+                        length: lengthInFeet, // These are the current available dimensions
+                        width: widthInFeet,
+                        area: area
+                    });
+                }
+            });
+
+            // 4. Automatic Cut and Waste Calculation (Guillotine Cut Simulation & New Cut Logic)
+            let totalCuts = 0;
+            let totalChargeableWasteArea = 0;
+            let unfulfilledCount = 0;
+
+            // Sort customer pieces by area (descending) to prioritize larger cuts
+            customerPieces.sort((a, b) => b.area - a.area);
+            
+            // --- Calculate totalCuts based on customer pieces grouping (independent of stock matching) ---
+            const groupedCustomerPiecesForCuts = new Map(); // Map<normalized_width_in_feet, Map<normalized_length_in_feet, count>>
+            customerPieces.forEach(piece => {
+                // Normalize dimensions: always store smaller as width, larger as length for consistent grouping
+                const normalizedDim1 = Math.min(piece.width, piece.length);
+                const normalizedDim2 = Math.max(piece.width, piece.length);
+
+                // Use a string key for map to handle float precision for grouping
+                const widthKey = normalizedDim1.toFixed(4); 
+                const lengthKey = normalizedDim2.toFixed(4);
+
+                if (!groupedCustomerPiecesForCuts.has(widthKey)) {
+                    groupedCustomerPiecesForCuts.set(widthKey, new Map());
+                }
+                const lengthsMap = groupedCustomerPiecesForCuts.get(widthKey);
+                lengthsMap.set(lengthKey, (lengthsMap.get(lengthKey) || 0) + 1);
+            });
+
+            for (const [widthKey, lengthsMap] of groupedCustomerPiecesForCuts.entries()) {
+                let totalPiecesInWidthGroup = 0;
+                for (const count of lengthsMap.values()) {
+                    totalPiecesInWidthGroup += count;
+                }
+                const distinctLengthsCount = lengthsMap.size;
+
+                if (distinctLengthsCount === 1) {
+                    // Scenario 1: All pieces in this width group are identical (same L, same W)
+                    // Each piece needs 2 cuts
+                    totalCuts += (2 * totalPiecesInWidthGroup);
+                } else {
+                    // Scenario 2: Same width, different lengths. Apply (N+1) rule for this width group.
+                    // This implies one initial rip cut to get the desired width strip, then N cross-cuts.
+                    totalCuts += (totalPiecesInWidthGroup + 1);
+                }
+            }
+            // --- End of totalCuts calculation ---
+
+
+            // --- Simulate cutting for waste calculation and fulfillment ---
+            customerPieces.forEach(customerPiece => {
+                if (customerPiece.fulfilled) return;
+
+                let bestStockIndex = -1;
+                let minTotalRemainderArea = Infinity; // Track the smallest total area of remainders after a cut
+
+                // Sort mutableStock by area (descending) before searching for a fit for the current customer piece
+                mutableStock.sort((a, b) => b.area - a.area);
+
+                // Find the best matching stock piece from mutableStock
+                for (let i = 0; i < mutableStock.length; i++) {
+                    const stockPiece = mutableStock[i];
+
+                    // Check if the stock piece can fit the customer piece (considering rotation)
+                    let fitNormal = (stockPiece.length >= customerPiece.length - EPSILON && stockPiece.width >= customerPiece.width - EPSILON);
+                    let fitRotated = (stockPiece.length >= customerPiece.width - EPSILON && stockPiece.width >= customerPiece.length - EPSILON);
+
+                    if (fitNormal || fitRotated) {
+                        let currentCutL = customerPiece.length;
+                        let currentCutW = customerPiece.width;
+
+                        if (fitRotated && !fitNormal) { // Only fit rotated if normal doesn't fit
+                            [currentCutL, currentCutW] = [customerPiece.width, customerPiece.length];
+                        } else if (fitNormal && fitRotated) { // If both fit, choose the one that minimizes waste
+                            // Calculate remainders for normal orientation
+                            const remsNormal = getGuillotineRemainders(stockPiece.length, stockPiece.width, customerPiece.length, customerPiece.width);
+                            const totalRemAreaNormal = remsNormal.reduce((sum, r) => sum + (r.L * r.W), 0);
+
+                            // Calculate remainders for rotated orientation
+                            const remsRotated = getGuillotineRemainders(stockPiece.length, stockPiece.width, customerPiece.width, customerPiece.length);
+                            const totalRemAreaRotated = remsRotated.reduce((sum, r) => sum + (r.L * r.W), 0);
+                            
+                            if (totalRemAreaRotated < totalRemAreaNormal) {
+                                [currentCutL, currentCutW] = [customerPiece.width, customerPiece.length]; // Use rotated dimensions
+                            }
+                            // Else, use normal dimensions (already set)
+                        }
+
+                        // Get the actual remainder pieces for the chosen cut orientation
+                        const potentialRemainderPieces = getGuillotineRemainders(stockPiece.length, stockPiece.width, currentCutL, currentCutW);
+                        const totalPotentialRemainderArea = potentialRemainderPieces.reduce((sum, r) => sum + (r.L * r.W), 0);
+
+                        if (totalPotentialRemainderArea < minTotalRemainderArea) {
+                            minTotalRemainderArea = totalPotentialRemainderArea;
+                            bestStockIndex = i;
+                        }
+                    }
+                }
+
+                if (bestStockIndex !== -1) {
+                    // Found a match, perform the cut
+                    const usedStockPiece = mutableStock[bestStockIndex];
+                    customerPiece.fulfilled = true; // Mark customer demand as fulfilled
+
+                    // Determine the actual cut dimensions used (normal or rotated)
+                    let actualCutL = customerPiece.length;
+                    let actualCutW = customerPiece.width;
+                    const fitNormal = (usedStockPiece.length >= customerPiece.length - EPSILON && usedStockPiece.width >= customerPiece.width - EPSILON);
+                    const fitRotated = (usedStockPiece.length >= customerPiece.width - EPSILON && usedStockPiece.width >= customerPiece.length - EPSILON);
+
+                    if (fitRotated && !fitNormal) {
+                        [actualCutL, actualCutW] = [customerPiece.width, customerPiece.length];
+                    } else if (fitNormal && fitRotated) {
+                        const remsNormal = getGuillotineRemainders(usedStockPiece.length, usedStockPiece.width, customerPiece.length, customerPiece.width);
+                        const totalRemAreaNormal = remsNormal.reduce((sum, r) => sum + (r.L * r.W), 0);
+
+                        const remsRotated = getGuillotineRemainders(usedStockPiece.length, usedStockPiece.width, customerPiece.width, customerPiece.length);
+                        const totalRemAreaRotated = remsRotated.reduce((sum, r) => sum + (r.L * r.W), 0);
+                        
+                        if (totalRemAreaRotated < totalRemAreaNormal) {
+                            [actualCutL, actualCutW] = [customerPiece.width, customerPiece.length];
+                        }
+                    }
+
+
+                    // Get the remainder pieces from the cut
+                    const remainderPieces = getGuillotineRemainders(usedStockPiece.length, usedStockPiece.width, actualCutL, actualCutW);
+
+                    // Remove the used stock piece from mutableStock
+                    mutableStock.splice(bestStockIndex, 1);
+
+                    // Add back the remainder pieces if they are usable or contribute to waste
+                    remainderPieces.forEach(rem => {
+                        const remArea = rem.L * rem.W;
+                        if (rem.L > EPSILON && rem.W > EPSILON && remArea > wasteThresholdArea - EPSILON) {
+                            mutableStock.push({
+                                length: rem.L,
+                                width: rem.W,
+                                area: remArea
+                            });
+                        } else if (remArea > EPSILON) { // If remainder is positive but below threshold, it's waste
+                            totalChargeableWasteArea += remArea;
+                        }
+                    });
+                    // Re-sort mutableStock to keep largest pieces at the top for next customer piece
+                    mutableStock.sort((a, b) => b.area - a.area);
+
+                } else {
+                    unfulfilledCount++;
+                }
+            });
+
+            // Display warning if any customer demand is unfulfilled
+            if (unfulfilledCount > 0) {
+                unfulfilledDemandMessage.classList.remove('hidden');
+            }
+
+            calculatedCutsDisplay.textContent = totalCuts.toString();
+            calculatedWasteAreaDisplay.textContent = totalChargeableWasteArea.toFixed(2);
+
+            // 5. Calculate Final Quote
+            let totalCustomerArea = customerPieces.filter(p => p.fulfilled).reduce((sum, p) => sum + p.area, 0);
+
+            const materialValue = (totalCustomerArea + totalChargeableWasteArea) * unitPriceOriginal * fragmentMarkupFactor;
+            const cuttingServiceCost = totalCuts * pricePerCut;
+            let finalCalculatedPrice = materialValue + cuttingServiceCost;
+            
+            // Store current calculated values for LLM explanation
+            currentTotalCustomerArea = totalCustomerArea;
+            currentTotalChargeableWasteArea = totalChargeableWasteArea;
+            currentTotalCuts = totalCuts;
+            currentPricePerCut = pricePerCut;
+            currentFinalCalculatedPrice = finalCalculatedPrice;
+
+            // Apply custom rounding
+            finalCalculatedPrice = roundToNearestFive(finalCalculatedPrice);
+
+            finalPriceDisplay.textContent = `$${finalCalculatedPrice.toFixed(2)}`;
+        }
+
+        // Function to call Gemini API for explanation
+        async function getLlmExplanation() {
+            llmExplanationOutput.classList.add('hidden');
+            llmLoadingSpinner.classList.add('active'); // Show spinner
+
+            const prompt = `作為一家木材店的銷售人員，請用繁體中文，以友善且易於理解的方式，向客戶解釋以下木板零散切割的報價：
+- 客戶所需木板總面積：${currentTotalCustomerArea.toFixed(2)} 平方尺
+- 因切割產生並計入成本的廢料面積：${currentTotalChargeableWasteArea.toFixed(2)} 平方尺
+- 總切割刀數：${currentTotalCuts} 刀
+- 每刀費用：${currentPricePerCut.toFixed(2)} 元
+- 最終報價：${currentFinalCalculatedPrice.toFixed(2)} 元
+
+請強調價格包含了材料、切割服務和廢料處理的成本，並解釋零散切割通常會比整板貴的原因。請避免使用專業術語，保持語氣親切。`;
+
+            let chatHistory = [];
+            chatHistory.push({ role: "user", parts: [{ text: prompt }] });
+            const payload = { contents: chatHistory };
+            const apiKey = ""; // Canvas will automatically provide this
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.candidates && result.candidates.length > 0 &&
+                    result.candidates[0].content && result.candidates[0].content.parts &&
+                    result.candidates[0].content.parts.length > 0) {
+                    const text = result.candidates[0].content.parts[0].text;
+                    llmExplanationOutput.textContent = text;
+                    llmExplanationOutput.classList.remove('hidden');
+                } else {
+                    llmExplanationOutput.textContent = '無法生成解釋。請稍後再試。';
+                    llmExplanationOutput.classList.remove('hidden');
+                    console.error('Gemini API response structure unexpected:', result);
+                }
+            } catch (error) {
+                llmExplanationOutput.textContent = '生成解釋時發生錯誤。請檢查網絡連接或稍後再試。';
+                llmExplanationOutput.classList.remove('hidden');
+                console.error('Error calling Gemini API:', error);
+            } finally {
+                llmLoadingSpinner.classList.remove('active'); // Hide spinner
+            }
+        }
+
+        // Initialization: Add event listeners for existing rows and calculate initial areas
+        document.querySelectorAll('.customer-item-row').forEach(row => {
+            row.querySelectorAll('input').forEach(input => {
+                input.addEventListener('input', calculatePrice);
+            });
+            updateItemAreaAndValidate(row);
+        });
+
+        document.querySelectorAll('.stock-item-row').forEach(row => {
+            row.querySelectorAll('input').forEach(input => {
+                input.addEventListener('input', calculatePrice);
+            });
+            updateItemAreaAndValidate(row, true);
+        });
+
+        // Add Event Listeners for buttons
+        addCustomerItemBtn.addEventListener('click', addCustomerItemRow);
+        addStockItemBtn.addEventListener('click', addStockItemRow);
+
+        calculatePriceBtn.addEventListener('click', calculatePrice);
+        explainQuoteBtn.addEventListener('click', getLlmExplanation); // New LLM button event listener
+
+        // Event listener for unit selector change
+        globalUnitSelect.addEventListener('change', () => {
+            const selectedUnit = globalUnitSelect.value;
+            updateUnitLabels(selectedUnit); // Update unit display for all labels
+            // Update area display and re-calculate price for all customer and stock items
+            document.querySelectorAll('.customer-item-row').forEach(row => updateItemAreaAndValidate(row));
+            document.querySelectorAll('.stock-item-row').forEach(row => updateItemAreaAndValidate(row, true));
+            calculatePrice();
+        });
+
+        // Listen for changes in basic settings to trigger recalculation
+        document.querySelectorAll('#originalBoardPrice, #fragmentMarkupFactor, #wasteThresholdArea, #pricePerCut').forEach(input => {
+            input.addEventListener('input', calculatePrice);
+        });
+
+        // Initial setup on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            updateUnitLabels(globalUnitSelect.value); // Ensure initial unit labels are correct
+            calculatePrice(); // Perform initial calculation
+        });
+    </script>
+</body>
+</html>
